@@ -41,7 +41,6 @@ add_executable(sr_tests
   validate_test.cpp
   fixtures.cpp
   pipeline_test.cpp
-  align_test.cpp
   error_mapping_test.cpp
   ecc_test.cpp
   burst_test.cpp

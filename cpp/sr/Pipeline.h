@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Burst.h"
+
 #include <opencv2/core.hpp>
 
 #include <cstdint>
@@ -21,7 +23,8 @@ struct Request {
   int n = 8;
   // invariant: blur filter ratio (lab filters.blur); 0 turns the filter off.
   double blur = 0.8;
-  int scale = 2;
+  // invariant: INTER_CUBIC upscale of the mean (lab bicubic_x2 for 2); 1 keeps the input size.
+  int scale = 1;
   std::optional<std::string> outputPath;
   std::string defaultOutputDir;
 };
@@ -30,16 +33,26 @@ struct Result {
   std::string path;
   int width = 0;
   int height = 0;
-  int framesUsed = 0;
+  int framesUsed = 0;  // invariant: used.size()
+  int refIndex = 0;    // invariant: used[0]
+  // invariant: indices into paths, in the order they were averaged (temporal order from refIndex).
+  std::vector<int> used;
+  // invariant: blur drops (ascending index), then ECC drops in visit order.
+  std::vector<Drop> dropped;
 };
 
-// invariant: run() rejects with E_INTERNAL before allocating output-sized buffers
-// when estimatePeakBytes() of the decoded reference exceeds this budget.
-inline constexpr std::uint64_t kMemoryBudgetBytes = std::uint64_t{1} << 30;
+// invariant: one entry per accepted non-reference frame, in visit order; H is the 3x3 CV_32F
+// full-resolution homography used for the warp (reference -> frame), cc the ECC correlation.
+struct TraceFrame {
+  int index = 0;
+  cv::Mat H;
+  double cc = 0;
+};
+using Trace = std::vector<TraceFrame>;
 
-// invariant: s^2*w*h*(3*4 + 3) (CV_32FC3 accumulator + one CV_8UC3 output-sized
-// buffer) + 3*w*h (decoded frame) + 2*w*h (reference and current gray).
-std::uint64_t estimatePeakBytes(int width, int height, int scale);
+// invariant: run() rejects with E_INTERNAL right after decoding paths[0], before any
+// frame-sized buffer is kept, when estimatePeakBytes() exceeds this budget.
+inline constexpr std::uint64_t kMemoryBudgetBytes = std::uint64_t{1} << 30;
 
 // invariant: working set of the ECC on a graySmall image (jacobian of 8 a-sized float planes
 // plus ~15 a-sized float temporaries, a <= 1024 x 1024), rounded up.
@@ -59,7 +72,10 @@ void meanRoundHalfEven(const cv::Mat& acc, int count, cv::Mat& out);
 // invariant: throws SrError(E_INVALID_ARGUMENT) iff the request breaks the JS API rules.
 void validate(const Request& request);
 
-// invariant: reports every failure as SrError; codes live in Errors.h.
-Result run(const Request& request);
+// invariant: lab mean_N + bicubic. Pass 1 decodes every frame (size check, graySmall,
+// sharpness); blur filter, reference, temporal order; pass 2 aligns frames in that order until
+// n are accepted, warps and averages them, then upscales by scale. Reports every failure as
+// SrError (codes in Errors.h); `trace`, when given, receives the accepted warps.
+Result run(const Request& request, Trace* trace = nullptr);
 
 }  // namespace sr

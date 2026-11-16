@@ -56,22 +56,15 @@ void encodeTo(const std::string& fsPath, const cv::Mat& img) {
   if (!out) throw SrError(code::WriteFailed, "could not write: " + fsPath);
 }
 
-bool isFinite(const cv::Mat& m) {
-  for (int r = 0; r < m.rows; ++r) {
-    for (int c = 0; c < m.cols; ++c) {
-      if (!std::isfinite(m.at<double>(r, c))) return false;
-    }
+void checkSize(const cv::Mat& frame, const cv::Size& expected, size_t index) {
+  if (frame.size() != expected) {
+    throw SrError(code::SizeMismatch, "index=" + std::to_string(index) + " is " +
+                                          sizeText(frame.size()) + ", expected " +
+                                          sizeText(expected));
   }
-  return true;
 }
 
 }  // namespace
-
-std::uint64_t estimatePeakBytes(int width, int height, int scale) {
-  const std::uint64_t px = static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
-  const std::uint64_t s2 = static_cast<std::uint64_t>(scale) * static_cast<std::uint64_t>(scale);
-  return s2 * px * (3 * 4 + 3) + 3 * px + 2 * px;
-}
 
 std::uint64_t estimatePeakBytes(int width, int height, int scale, int frames) {
   const double s = static_cast<double>(kSmallSide) / std::max(width, height);
@@ -100,67 +93,101 @@ void meanRoundHalfEven(const cv::Mat& acc, int count, cv::Mat& out) {
   }
 }
 
-Result run(const Request& request) {
+Result run(const Request& request, Trace* trace) {
   validate(request);
 
   const std::string outFs =
       request.outputPath ? toFsPath(*request.outputPath) : uniqueOutputPath(request.defaultOutputDir);
-  const double s = request.scale;
+  const size_t frames = request.paths.size();
 
-  cv::Size refSize;
-  cv::Size outSize;
-  cv::Mat refGray;
-  cv::Mat acc;
-  int framesUsed = 0;
-
-  // invariant: one decoded frame alive at a time; only refGray and the accumulator persist.
-  for (size_t i = 0; i < request.paths.size(); ++i) {
+  // Pass 1: one decoded frame alive at a time; only its graySmall and sharpness are kept.
+  cv::Size size;
+  double s = 0;
+  std::vector<cv::Mat> small(frames);
+  std::vector<double> sharp(frames);
+  for (size_t i = 0; i < frames; ++i) {
     const cv::Mat frame = decodeFrame(request.paths[i], i);
     if (i == 0) {
-      const std::uint64_t peak = estimatePeakBytes(frame.cols, frame.rows, request.scale);
+      size = frame.size();
+      const std::uint64_t peak = estimatePeakBytes(size.width, size.height, request.scale,
+                                                   static_cast<int>(frames));
       if (peak > kMemoryBudgetBytes) {
         throw SrError(code::Internal, "estimated memory " + std::to_string(peak >> 20) +
                                           " MiB exceeds budget of " +
                                           std::to_string(kMemoryBudgetBytes >> 20) + " MiB");
       }
-      refSize = frame.size();
-      outSize = cv::Size(request.scale * refSize.width, request.scale * refSize.height);
-      acc = cv::Mat::zeros(outSize, CV_32FC3);
-      cv::cvtColor(frame, refGray, cv::COLOR_BGR2GRAY);
-    } else if (frame.size() != refSize) {
-      throw SrError(code::SizeMismatch, "index=" + std::to_string(i) + " is " +
-                                            sizeText(frame.size()) + ", expected " +
-                                            sizeText(refSize));
+      // invariant: cv::resize asserts on an empty target size, and phaseCorrelate/ECC need
+      // sides >= 2 (AD-004: asserts abort), so such thin frames never reach graySmall.
+      const double r = static_cast<double>(kSmallSide) / std::max(size.width, size.height);
+      if (std::lround(size.width * r) < 2 || std::lround(size.height * r) < 2) {
+        throw SrError(code::AlignmentFailed, "frames of " + sizeText(size) + " are too thin to align");
+      }
+    } else {
+      checkSize(frame, size, i);
     }
-
-    // invariant: the reference is never estimated or skipped; it always uses A = I.
-    cv::Mat A = cv::Mat::eye(2, 3, CV_64F);
-    if (i > 0) {
-      cv::Mat gray;
-      cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-      bool aligned = false;
-      A = estimateTransform(refGray, gray, aligned);
-      if (!aligned || !isFinite(A)) continue;
-    }
-    const cv::Mat M = s * A;
-
-    cv::Mat warped;
-    cv::warpAffine(frame, warped, M, outSize, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
-    cv::accumulate(warped, acc);
-    ++framesUsed;
+    small[i] = graySmall(frame, s);
+    sharp[i] = sharpness(small[i]);
   }
 
-  if (framesUsed < 2) {
-    throw SrError(code::AlignmentFailed,
-                  "only " + std::to_string(framesUsed) + " frame(s) usable, need at least 2");
+  Result result;
+  // invariant: blur 0 keeps every frame (no sharpness is below 0 x median).
+  const std::vector<int> kept = applyBlurFilter(sharp, request.blur, result.dropped);
+  const int ref = pickReference(kept, sharp);
+  const std::vector<int> order = temporalOrder(kept, ref);
+
+  // Pass 2: frames in temporal order until n are accepted; only accepted frames are decoded again.
+  cv::Mat acc = cv::Mat::zeros(size, CV_32FC3);
+  for (const int i : order) {
+    if (static_cast<int>(result.used.size()) == request.n) break;
+    cv::Mat H;
+    if (i != ref) {
+      const WarpEstimate e = estimateWarp(small[ref], small[i], s);
+      if (e.status != WarpEstimate::Status::Ok) {
+        result.dropped.push_back({i, dropReason(e)});
+        continue;
+      }
+      H = e.H;
+      if (trace) trace->push_back({i, e.H, e.cc});
+    }
+
+    const cv::Mat frame = decodeFrame(request.paths[i], i);
+    // why: the file may have changed since pass 1.
+    checkSize(frame, size, i);
+    if (H.empty()) {
+      cv::accumulate(frame, acc);
+    } else {
+      cv::Mat warped;
+      cv::warpPerspective(frame, warped, H, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP,
+                          cv::BORDER_REPLICATE);
+      cv::accumulate(warped, acc);
+    }
+    result.used.push_back(i);
+  }
+  small.clear();
+
+  if (result.used.size() < 2) {
+    std::string msg = "only " + std::to_string(result.used.size()) +
+                      " frame(s) usable, need at least 2; dropped:";
+    for (const Drop& d : result.dropped) msg += " index=" + std::to_string(d.index) + " " + d.reason + ";";
+    throw SrError(code::AlignmentFailed, msg);
   }
 
-  cv::Mat mean;
-  acc.convertTo(mean, CV_8UC3, 1.0 / framesUsed);
+  cv::Mat out;
+  meanRoundHalfEven(acc, static_cast<int>(result.used.size()), out);
   acc.release();
+  if (request.scale > 1) {
+    cv::Mat up;
+    cv::resize(out, up, cv::Size(), request.scale, request.scale, cv::INTER_CUBIC);
+    out = up;
+  }
 
-  encodeTo(outFs, mean);
-  return Result{toFileUri(outFs), outSize.width, outSize.height, framesUsed};
+  encodeTo(outFs, out);
+  result.path = toFileUri(outFs);
+  result.width = out.cols;
+  result.height = out.rows;
+  result.framesUsed = static_cast<int>(result.used.size());
+  result.refIndex = ref;
+  return result;
 }
 
 }  // namespace sr

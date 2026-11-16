@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "../platform/TempDir.h"
+#include "../sr/Align.h"
 #include "../sr/Errors.h"
 #include "../sr/Paths.h"
 #include "../sr/Pipeline.h"
@@ -9,8 +10,11 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -38,6 +42,55 @@ std::vector<std::string> identicalFrames(const fs::path& dir, int n = 5) {
   return paths;
 }
 
+// invariant: texture squeezed into [30, 221], so the offsets and gains below never clip.
+cv::Mat baseImage(int w, int h, std::uint64_t seed = 42) {
+  cv::Mat out;
+  fixtures::texturedImage(w, h, seed).convertTo(out, -1, 0.75, 30);
+  return out;
+}
+
+// why: ECC is invariant to brightness offsets, so offset frames align with H = I exactly
+// while still making the mean depend on which frames were used (L-001).
+cv::Mat plus(const cv::Mat& img, int c) { return img + cv::Scalar::all(c); }
+
+// invariant: same texture rotated by 180 degrees, contrast 0.95 (sharpness ~0.9 of the
+// original: passes the 0.8 blur filter, never the sharpest, never aligns).
+cv::Mat unrelated(const cv::Mat& img) {
+  cv::Mat r, out;
+  cv::rotate(img, r, cv::ROTATE_180);
+  r.convertTo(out, -1, 0.95, 6);
+  return out;
+}
+
+// invariant: per element nearbyint(sum / count) of frames[idx], computed in double.
+cv::Mat expectedMean(const std::vector<cv::Mat>& frames, const std::vector<int>& idx) {
+  cv::Mat sum = cv::Mat::zeros(frames[0].size(), CV_32SC3);
+  for (int i : idx) cv::add(sum, frames[i], sum, cv::noArray(), CV_32SC3);
+  cv::Mat out(sum.size(), CV_8UC3);
+  for (int r = 0; r < sum.rows; ++r) {
+    for (int c = 0; c < sum.cols * 3; ++c) {
+      out.ptr<uchar>(r)[c] = static_cast<uchar>(
+          std::nearbyint(static_cast<double>(sum.ptr<int>(r)[c]) / static_cast<double>(idx.size())));
+    }
+  }
+  return out;
+}
+
+double maxAbsDiff(const cv::Mat& a, const cv::Mat& b) {
+  if (a.size() != b.size() || a.type() != b.type()) return -1;
+  return cv::norm(a, b, cv::NORM_INF);
+}
+
+cv::Mat readOut(const sr::Result& res) { return cv::imread(sr::toFsPath(res.path), cv::IMREAD_COLOR); }
+
+std::vector<int> dropIndices(const sr::Result& res) {
+  std::vector<int> out;
+  for (const auto& d : res.dropped) out.push_back(d.index);
+  return out;
+}
+
+const char* const kEccReason = R"(ECC did not converge, dropped|ECC cc -?\d\.\d{3} < 0\.9, dropped)";
+
 sr::SrError runExpectingError(const sr::Request& r) {
   try {
     sr::run(r);
@@ -56,39 +109,143 @@ const std::vector<unsigned char> kJpegMagic = {0xFF, 0xD8, 0xFF};
 
 }  // namespace
 
-TEST(Pipeline, IdenticalFramesDefaultScaleEqualsUpscaledReference) {
+// LP-CORE-09 / LP-API-01: identical frames at the default scale give the input back.
+TEST(Pipeline, IdenticalFramesAtDefaultScaleEqualTheInput) {
   const auto dir = fixtures::freshDir();
-  auto r = requestFor(identicalFrames(dir), dir);
+  const auto paths = identicalFrames(dir, 10);
+  const cv::Mat input = cv::imread(paths[0], cv::IMREAD_COLOR);
+  for (const int n : {8, 30}) {
+    auto r = requestFor(paths, dir);
+    r.n = n;
+    r.outputPath = (dir / ("out" + std::to_string(n) + ".png")).string();
+
+    const sr::Result res = sr::run(r);
+
+    EXPECT_EQ(res.path.rfind("file://", 0), 0u) << res.path;
+    EXPECT_EQ(res.width, kW);
+    EXPECT_EQ(res.height, kH);
+    const size_t expectedUsed = std::min<size_t>(n, paths.size());
+    EXPECT_EQ(res.used.size(), expectedUsed) << n;
+    EXPECT_EQ(res.framesUsed, static_cast<int>(expectedUsed)) << n;
+    ASSERT_FALSE(res.used.empty());
+    EXPECT_EQ(res.used[0], res.refIndex);
+    EXPECT_EQ(res.refIndex, 0);  // sharpness ties: first frame wins
+    EXPECT_TRUE(res.dropped.empty());
+    EXPECT_EQ(maxAbsDiff(readOut(res), input), 0.0) << n;
+  }
+}
+
+// LP-CORE-01 / L-001: a blurred frame is dropped with the lab text and left out of the mean.
+TEST(Pipeline, BlurredFrameIsDroppedAndLeftOutOfTheMean) {
+  const auto dir = fixtures::freshDir();
+  const cv::Mat base = baseImage(128, 96);
+  std::vector<cv::Mat> frames;
+  for (int i = 0; i < 10; ++i) frames.push_back(plus(base, i));
+  cv::GaussianBlur(frames[3], frames[3], cv::Size(0, 0), 1.5);
+  auto r = requestFor(fixtures::writeFrames(dir, frames), dir);
   r.outputPath = (dir / "out.png").string();
 
   const sr::Result res = sr::run(r);
 
-  EXPECT_EQ(res.path.rfind("file://", 0), 0u) << res.path;
-  const std::string outFs = sr::toFsPath(res.path);
-  ASSERT_TRUE(fs::exists(outFs)) << outFs;
-  EXPECT_EQ(res.width, 2 * kW);
-  EXPECT_EQ(res.height, 2 * kH);
-  EXPECT_EQ(res.framesUsed, 5);
-
-  const cv::Mat out = cv::imread(outFs, cv::IMREAD_COLOR);
-  ASSERT_FALSE(out.empty());
-  EXPECT_EQ(out.cols, 2 * kW);
-  EXPECT_EQ(out.rows, 2 * kH);
-
-  const cv::Mat ref = cv::imread(r.paths[0], cv::IMREAD_COLOR);
-  const cv::Mat S = (cv::Mat_<double>(2, 3) << 2, 0, 0, 0, 2, 0);
-  cv::Mat expected;
-  cv::warpAffine(ref, expected, S, cv::Size(2 * kW, 2 * kH), cv::INTER_CUBIC, cv::BORDER_REPLICATE);
-
-  cv::Mat diff;
-  cv::absdiff(out, expected, diff);
-  double maxDiff = 0;
-  cv::minMaxLoc(diff.reshape(1), nullptr, &maxDiff);
-  EXPECT_LE(maxDiff, 1.0);
+  ASSERT_EQ(res.dropped.size(), 1u);
+  EXPECT_EQ(res.dropped[0].index, 3);
+  EXPECT_TRUE(std::regex_match(res.dropped[0].reason,
+                               std::regex(R"(sharpness 0\.\d\d of median < 0\.8, dropped \(blur\))")))
+      << res.dropped[0].reason;
+  EXPECT_EQ(res.refIndex, 0);
+  const std::vector<int> used = {0, 1, 2, 4, 5, 6, 7, 8};
+  EXPECT_EQ(res.used, used);
+  EXPECT_EQ(maxAbsDiff(readOut(res), expectedMean(frames, used)), 0.0);
 }
 
-// invariant: SR-CFG-03 — `.jpg` output is JPEG at quality 95; identical frames make
-// the mean equal the upscaled reference, so the encoded bytes are fully determined.
+// LP-CORE-05 / L-001: an unrelated frame is dropped by ECC and left out of the mean.
+TEST(Pipeline, UnrelatedFrameIsDroppedByEccAndLeftOutOfTheMean) {
+  const auto dir = fixtures::freshDir();
+  const cv::Mat base = baseImage(128, 96);
+  std::vector<cv::Mat> frames;
+  for (int i = 0; i < 6; ++i) frames.push_back(plus(base, i));
+  frames[1] = unrelated(frames[1]);
+  auto r = requestFor(fixtures::writeFrames(dir, frames), dir);
+  r.outputPath = (dir / "out.png").string();
+
+  const sr::Result res = sr::run(r);
+
+  EXPECT_EQ(res.refIndex, 0);
+  ASSERT_EQ(res.dropped.size(), 1u);
+  EXPECT_EQ(res.dropped[0].index, 1);
+  EXPECT_TRUE(std::regex_match(res.dropped[0].reason, std::regex(kEccReason))) << res.dropped[0].reason;
+  const std::vector<int> used = {0, 2, 3, 4, 5};
+  EXPECT_EQ(res.used, used);
+  EXPECT_EQ(maxAbsDiff(readOut(res), expectedMean(frames, used)), 0.0);
+}
+
+// LP-CORE-02/03/04: the sharpest frame is the reference and fixes the output geometry; frames
+// are visited by temporal distance and the run stops after n accepted (index 9, unrelated,
+// is never visited, so it is not dropped).
+TEST(Pipeline, StopsAfterNFramesInTemporalOrderFromTheSharpest) {
+  constexpr int w = 128, h = 96, m = 8;
+  const std::vector<cv::Point> shifts = {{0, 0},  {2, 1},  {-3, 2}, {1, -2}, {-2, -1},
+                                         {3, 3},  {-1, 2}, {2, -3}, {0, 1},  {0, 0}};
+  const cv::Mat scene = baseImage(w + 2 * m, h + 2 * m, 7);
+  std::vector<cv::Mat> frames;
+  for (const auto& d : shifts) frames.push_back(scene(cv::Rect(m - d.x, m - d.y, w, h)).clone());
+  frames[5].convertTo(frames[5], -1, 1.1, -12.8);  // sharpest (higher contrast)
+  frames[9] = unrelated(frames[9]);
+  const auto dir = fixtures::freshDir();
+  auto r = requestFor(fixtures::writeFrames(dir, frames), dir);
+  r.n = 3;
+  r.outputPath = (dir / "out.png").string();
+
+  sr::Trace trace;
+  const sr::Result res = sr::run(r, &trace);
+
+  EXPECT_EQ(res.refIndex, 5);
+  EXPECT_EQ(res.used, (std::vector<int>{5, 4, 6}));
+  EXPECT_EQ(res.framesUsed, 3);
+  EXPECT_TRUE(res.dropped.empty());
+  ASSERT_EQ(trace.size(), 2u);
+  for (size_t k = 0; k < trace.size(); ++k) {
+    EXPECT_EQ(trace[k].index, res.used[k + 1]);
+    EXPECT_EQ(trace[k].H.type(), CV_32FC1);
+    EXPECT_EQ(trace[k].H.size(), cv::Size(3, 3));
+    EXPECT_GE(trace[k].cc, sr::kMinEccCorrelation);
+  }
+
+  // invariant: the output is registered to frame 5, not to paths[0].
+  const auto gray64 = [](const cv::Mat& bgr) {
+    cv::Mat g, f;
+    cv::cvtColor(bgr, g, cv::COLOR_BGR2GRAY);
+    g.convertTo(f, CV_64F);
+    return f;
+  };
+  const cv::Mat out = gray64(readOut(res));
+  ASSERT_EQ(out.size(), cv::Size(w, h));
+  cv::Mat window;
+  cv::createHanningWindow(window, out.size(), CV_64F);
+  const cv::Point2d toRef = cv::phaseCorrelate(out.clone(), gray64(frames[5]), window);
+  const cv::Point2d toFirst = cv::phaseCorrelate(out.clone(), gray64(frames[0]), window);
+  EXPECT_LT(cv::norm(toRef), 0.25) << toRef;
+  EXPECT_NEAR(cv::norm(toFirst), cv::norm(shifts[5] - shifts[0]), 0.25) << toFirst;
+}
+
+// LP-CORE-08: scale > 1 is INTER_CUBIC of the mean, after averaging.
+TEST(Pipeline, ScaleTwoIsBicubicOfTheMean) {
+  const auto dir = fixtures::freshDir();
+  auto r = requestFor(identicalFrames(dir), dir);
+  r.scale = 2;
+  r.outputPath = (dir / "out.png").string();
+
+  const sr::Result res = sr::run(r);
+
+  EXPECT_EQ(res.width, 2 * kW);
+  EXPECT_EQ(res.height, 2 * kH);
+  cv::Mat expected;
+  cv::resize(cv::imread(r.paths[0], cv::IMREAD_COLOR), expected, cv::Size(), 2, 2, cv::INTER_CUBIC);
+  EXPECT_EQ(maxAbsDiff(readOut(res), expected), 0.0);
+}
+
+// invariant: SR-CFG-03 / L-002 — `.jpg` output is JPEG at quality 95; identical frames make
+// the mean equal the reference, so the encoded bytes are fully determined.
 TEST(Pipeline, JpegOutputIsEncodedAtQuality95) {
   const auto dir = fixtures::freshDir();
   auto r = requestFor(identicalFrames(dir), dir);
@@ -96,10 +253,7 @@ TEST(Pipeline, JpegOutputIsEncodedAtQuality95) {
 
   sr::run(r);
 
-  const cv::Mat ref = cv::imread(r.paths[0], cv::IMREAD_COLOR);
-  const cv::Mat S = (cv::Mat_<double>(2, 3) << 2, 0, 0, 0, 2, 0);
-  cv::Mat expected;
-  cv::warpAffine(ref, expected, S, cv::Size(2 * kW, 2 * kH), cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+  const cv::Mat expected = cv::imread(r.paths[0], cv::IMREAD_COLOR);
   std::vector<uchar> expectedBytes;
   ASSERT_TRUE(cv::imencode(".jpg", expected, expectedBytes, {cv::IMWRITE_JPEG_QUALITY, 95}));
 
@@ -111,7 +265,7 @@ TEST(Pipeline, JpegOutputIsEncodedAtQuality95) {
 TEST(Pipeline, ScaleControlsOutputDimensions) {
   const auto dir = fixtures::freshDir();
   const auto paths = identicalFrames(dir);
-  for (int s : {1, 3, 4}) {
+  for (int s : {2, 3, 4}) {
     auto r = requestFor(paths, dir);
     r.scale = s;
     r.outputPath = (dir / ("out" + std::to_string(s) + ".png")).string();
@@ -161,8 +315,8 @@ TEST(Pipeline, OverwritesExistingOutput) {
 
   EXPECT_TRUE(startsWith(fixtures::readBytes(*r.outputPath), kPngMagic));
   const cv::Mat out = cv::imread(*r.outputPath, cv::IMREAD_COLOR);
-  EXPECT_EQ(out.cols, 2 * kW);
-  EXPECT_EQ(out.rows, 2 * kH);
+  EXPECT_EQ(out.cols, kW);
+  EXPECT_EQ(out.rows, kH);
 }
 
 TEST(Pipeline, MissingFileFailsDecodeWithIndex) {
@@ -185,13 +339,36 @@ TEST(Pipeline, TextFileFailsDecodeWithIndex) {
   EXPECT_NE(e.message.find("index=1"), std::string::npos) << e.message;
 }
 
-TEST(Pipeline, DifferentSizeFrameFailsWithIndex) {
+// LP-API-07: sizes are checked in pass 1, so a mismatch is reported even for a frame
+// that pass 2 would never visit (n = 2 is reached at frame 1).
+TEST(Pipeline, DifferentSizeFrameFailsWithIndexBeforeAnyWarp) {
   const auto dir = fixtures::freshDir();
   auto paths = identicalFrames(dir);
-  paths[3] = fixtures::writePng(dir, "small.png", fixtures::texturedImage(kW - 8, kH));
-  const auto e = runExpectingError(requestFor(paths, dir));
+  paths[4] = fixtures::writePng(dir, "small.png", fixtures::texturedImage(kW - 8, kH));
+  auto r = requestFor(paths, dir);
+  r.n = 2;
+  r.outputPath = (dir / "out.png").string();
+  const auto e = runExpectingError(r);
   EXPECT_EQ(e.code, "E_SIZE_MISMATCH");
-  EXPECT_NE(e.message.find("index=3"), std::string::npos) << e.message;
+  EXPECT_NE(e.message.find("index=4"), std::string::npos) << e.message;
+  EXPECT_FALSE(fs::exists(*r.outputPath));
+}
+
+// LP-API-07: when every other frame is dropped the call rejects and lists the drops.
+TEST(Pipeline, OnlyTheReferenceAlignedFails) {
+  const auto dir = fixtures::freshDir();
+  const cv::Mat base = baseImage(128, 96);
+  const auto paths = fixtures::writeFrames(dir, {base, unrelated(base), unrelated(plus(base, 2))});
+  auto r = requestFor(paths, dir);
+  r.outputPath = (dir / "out.png").string();
+
+  const auto e = runExpectingError(r);
+
+  EXPECT_EQ(e.code, "E_ALIGNMENT_FAILED");
+  EXPECT_NE(e.message.find("only 1 frame(s) usable"), std::string::npos) << e.message;
+  EXPECT_NE(e.message.find("index=1 ECC"), std::string::npos) << e.message;
+  EXPECT_NE(e.message.find("index=2 ECC"), std::string::npos) << e.message;
+  EXPECT_FALSE(fs::exists(*r.outputPath));
 }
 
 TEST(Pipeline, MissingOutputDirectoryFailsWrite) {
@@ -267,13 +444,6 @@ TEST(Pipeline, ConcurrentDefaultOutputsAreDistinctJpegsInTempDir) {
   }
 }
 
-TEST(PipelinePreflight, EstimatePeakBytesMatchesFormula) {
-  // invariant: s^2*w*h*(3*4 + 3) output buffers + 3*w*h frame + 2*w*h gray working set.
-  EXPECT_EQ(sr::estimatePeakBytes(100, 50, 2), 325000u);
-  EXPECT_EQ(sr::estimatePeakBytes(2304, 2048, 4), 1156055040u);
-  EXPECT_EQ(sr::estimatePeakBytes(2304, 2048, 1), 94371840u);
-}
-
 // Edge case (memory): design formula, max of accumulate and finalize phases.
 TEST(PipelinePreflight, LabEstimateMatchesFormula) {
   // 4000x3000 -> graySmall 1024x768 (a = 786432), p = 12e6
@@ -320,12 +490,22 @@ TEST(MeanRoundHalfEven, ThirtyFullFramesStayAt255) {
   EXPECT_EQ(cv::countNonZero(out.reshape(1) != 255), 0);
 }
 
-TEST(PipelinePreflight, OverBudgetReferenceRejectsInternalWithoutOutput) {
-  constexpr int w = 2304, h = 2048;
-  ASSERT_GT(sr::estimatePeakBytes(w, h, 4), sr::kMemoryBudgetBytes);
+namespace {
+
+// invariant: 22 MP (51p > 1 GiB at scale 4, < 1 GiB at scale 1) with a textured centre so
+// ECC converges; the flat rest keeps the PNG small.
+std::string largeFrame(const fs::path& dir) {
+  cv::Mat img(4400, 5000, CV_8UC3, cv::Scalar(90, 120, 150));
+  fixtures::texturedImage(1000, 1000).copyTo(img(cv::Rect(2000, 1700, 1000, 1000)));
+  return fixtures::writePng(dir, "big.png", img);
+}
+
+}  // namespace
+
+TEST(PipelinePreflight, OverBudgetBurstRejectsInternalWithoutOutput) {
+  ASSERT_GT(sr::estimatePeakBytes(5000, 4400, 4, 3), sr::kMemoryBudgetBytes);
   const auto dir = fixtures::freshDir();
-  const auto big = fixtures::writePng(dir, "big.png", fixtures::texturedImage(w, h));
-  auto r = requestFor(std::vector<std::string>(5, big), dir);
+  auto r = requestFor(std::vector<std::string>(3, largeFrame(dir)), dir);
   r.scale = 4;
   r.outputPath = (dir / "out.jpg").string();
 
@@ -337,30 +517,25 @@ TEST(PipelinePreflight, OverBudgetReferenceRejectsInternalWithoutOutput) {
 }
 
 TEST(PipelinePreflight, SameLargeFramesAtScaleOneResolve) {
-  constexpr int w = 2304, h = 2048;
+  ASSERT_LT(sr::estimatePeakBytes(5000, 4400, 1, 3), sr::kMemoryBudgetBytes);
   const auto dir = fixtures::freshDir();
-  const auto big = fixtures::writePng(dir, "big.png", fixtures::texturedImage(w, h));
-  auto r = requestFor(std::vector<std::string>(5, big), dir);
-  r.scale = 1;
+  auto r = requestFor(std::vector<std::string>(3, largeFrame(dir)), dir);
   r.outputPath = (dir / "out.jpg").string();
 
   const sr::Result res = sr::run(r);
 
-  EXPECT_EQ(res.width, w);
-  EXPECT_EQ(res.height, h);
-  EXPECT_EQ(res.framesUsed, 5);
+  EXPECT_EQ(res.width, 5000);
+  EXPECT_EQ(res.height, 4400);
+  EXPECT_EQ(res.framesUsed, 3);
   EXPECT_TRUE(fs::exists(*r.outputPath));
 }
 
-TEST(PipelinePreflight, DegenerateOneRowFramesRejectInsteadOfAborting) {
-  // why: OpenCV asserts abort the process (AD-004); 1-px-high frames would reach
-  // createHanningWindow's size assert without a guard.
+// Edge case: frames so thin that graySmall would have a side < 2 px reject instead of reaching
+// cv::resize's size assert (AD-004: abort).
+TEST(PipelinePreflight, TooThinFramesRejectInsteadOfAborting) {
   const auto dir = fixtures::freshDir();
-  std::vector<std::string> paths;
-  for (int i = 0; i < 5; ++i) {
-    paths.push_back(fixtures::writePng(dir, "row" + std::to_string(i) + ".png",
-                                       fixtures::texturedImage(64, 1, 100 + i)));
-  }
-  const auto e = runExpectingError(requestFor(paths, dir));
+  const auto row = fixtures::writePng(dir, "row.png", fixtures::texturedImage(4096, 1));
+  const auto e = runExpectingError(requestFor(std::vector<std::string>(3, row), dir));
   EXPECT_EQ(e.code, "E_ALIGNMENT_FAILED");
+  EXPECT_NE(e.message.find("too thin"), std::string::npos) << e.message;
 }

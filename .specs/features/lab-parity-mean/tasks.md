@@ -231,6 +231,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native)!: merge bursts like the burst-sr-lab mean_N pipeline`
+**Status**: ✅ Done — `yarn test:native` 86/86 (−6 align_test, −1 3-arg formula test, +5 new). Mutants caught: no stop at `n`, reference = first kept, no pass-1 size check. *(Changed during T8: the memory pre-flight runs right after decoding `paths[0]` (frame count is known up front) instead of after pass 1, so an over-budget burst fails before decoding the rest; same formula and budget. Added a guard: frames whose graySmall would have a side < 2 px reject `E_ALIGNMENT_FAILED` "too thin to align", because `cv::resize` asserts on an empty target. The `E_ALIGNMENT_FAILED` message lists the drops as `index=N <reason>;`. Adapter `toScale` still defaults to 2 until T10.)*
 
 ---
 

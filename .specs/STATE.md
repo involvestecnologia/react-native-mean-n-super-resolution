@@ -53,10 +53,10 @@
 ## Handoff
 
 - **Feature**: `.specs/features/lab-parity-mean` (port burst-sr-lab `mean_N` + bicubic; breaking API)
-- **Phase / Task**: Execute — T1–T7 done; next T8 (tasks approved 2026-11-16)
-- **Completed**: spec/context/design/tasks (dffe611), macOS host link fix (d3045a6), T1 3efe012, T2 dc99000, T3 17939bb, T4 5d280db, T5 4395b0f, T6 a279a3f, T7 d96fda3; `yarn test:native` 88/88. Per-task notes and deviations in tasks.md `Status` lines. Lab reference code: `~/repos/burst-sr-lab` (LAB_DIR for T12/T13)
+- **Phase / Task**: Execute — T1–T8 done; next T9 (tasks approved 2026-11-16)
+- **Completed**: spec/context/design/tasks (dffe611), macOS host link fix (d3045a6), T1 3efe012, T2 dc99000, T3 17939bb, T4 5d280db, T5 4395b0f, T6 a279a3f, T7 d96fda3, T8 (feat(native)! merge bursts like mean_N); `yarn test:native` 86/86. Per-task notes and deviations in tasks.md `Status` lines. Lab reference code: `~/repos/burst-sr-lab` (LAB_DIR for T12/T13)
 - **In-progress** (file:line): none
-- **Next step**: T8 two-pass run (also removes estimateTransform, old estimatePeakBytes, align_test.cpp; adds Result fields, Trace, scale default 1)
+- **Next step**: T9 TS spec, public types and JS validation (then T10 adapter: `toScale` default 2 → 1, new result fields)
 - **Blockers**: none (field sessions of 2026-10-28 not on this machine: parity on field data is an open evidence gap)
 - **Uncommitted files**: none
 - **Branch**: feat/lab-parity-mean
