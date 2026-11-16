@@ -25,6 +25,7 @@ add_library(
     react-native-mean-n-super-resolution    STATIC
     ../cpp/MeanNSuperResolutionImpl.cpp
     ../cpp/sr/Align.cpp
+    ../cpp/sr/Burst.cpp
     ../cpp/sr/ErrorMapping.cpp
     ../cpp/sr/Paths.cpp
     ../cpp/sr/Pipeline.cpp
