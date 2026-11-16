@@ -119,7 +119,9 @@ macro(opencv_mobile_find_package)
       add_library(opencv_mobile_framework INTERFACE IMPORTED)
       set_target_properties(opencv_mobile_framework PROPERTIES
         INTERFACE_COMPILE_OPTIONS "-F${_ocvm_root}"
-        INTERFACE_LINK_OPTIONS "-F${_ocvm_root};-framework;opencv2;-framework;Accelerate")
+        # hazard: CMake de-duplicates link options, so a bare second "-framework" is dropped;
+        # SHELL: keeps each "-framework X" pair together.
+        INTERFACE_LINK_OPTIONS "-F${_ocvm_root};SHELL:-framework opencv2;SHELL:-framework Accelerate")
     endif()
     set(OpenCV_FOUND TRUE)
     set(OpenCV_LIBS opencv_mobile_framework)
