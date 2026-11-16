@@ -188,23 +188,24 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native)!: validate lab options n and blur and free frame count`
-**Status**: ✅ Done — `yarn test:native` 83/83; Validate.* 13 tests
+**Status**: ✅ Done (a279a3f) — `yarn test:native` 83/83; Validate.* 13 tests
 
 ---
 
 ### T7: Half-to-even mean and memory estimate [P]
 
-**What**: `sr::meanRoundHalfEven` and the new `estimatePeakBytes(w, h, scale, frames)`.
+**What**: `sr::meanRoundHalfEven` and the new `estimatePeakBytes(w, h, scale, frames)`. *(Added next to the 3-argument version, which `run` still uses; T8 removes it.)*
 **Where**: `cpp/sr/Pipeline.{h,cpp}`, `cpp/tests/pipeline_test.cpp`
 **Depends on**: None
 **Requirement**: LP-CORE-07, edge case memory
 
 **Done when**:
 - [ ] Sums `{5,7,9,11}` with count 2 → `{2,4,4,6}` (half to even); count 6 sum 15 → 2 (2.5 → 2), sum 21 → 4 (3.5 → 4); 30·255 / 30 → 255
-- [ ] `estimatePeakBytes` equals the design formula for (4000×3000, 4, 30) and (4000×3000, 1, 3), literal values in the test; 12 MP/30/4 < 1 GiB; a 50 MP/30/4 case > 1 GiB
+- [ ] `estimatePeakBytes` equals the design formula for (4000×3000, 4, 30) and (4000×3000, 1, 3), literal values in the test; 12 MP/30/4 < 1 GiB; 50 MP/30/4 > 1 GiB; 24 MP/30/1 < 1 GiB
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add half-to-even mean and new memory estimate`
+**Status**: ✅ Done — `yarn test:native` 88/88; MeanRoundHalfEven.* 3, PipelinePreflight.LabEstimate* 2 tests; rounding cross-checked with numpy float32
 
 ---
 
@@ -214,6 +215,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 **Where**: `cpp/sr/Pipeline.cpp`, `cpp/tests/pipeline_test.cpp`, `cpp/tests/fixtures.{h,cpp}`
 **Depends on**: T3, T4, T5, T6, T7
 **Also from T6**: `Result` fields (`refIndex`, `used`, `dropped`), `Trace`, `Request::scale` default 1
+**Also from T7**: remove the 3-argument `estimatePeakBytes` and rewrite its tests on the 4-argument one
 **Also**: remove `estimateTransform` from `Align.*` and delete `cpp/tests/align_test.cpp` (moved here from T5); move any still-relevant pipeline cases from it into `pipeline_test.cpp`
 **Requirement**: LP-CORE-06, LP-CORE-08, LP-CORE-09, LP-API-01 (C++ fields), LP-API-07
 

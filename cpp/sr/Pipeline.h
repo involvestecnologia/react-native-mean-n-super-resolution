@@ -1,5 +1,7 @@
 #pragma once
 
+#include <opencv2/core.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -38,6 +40,21 @@ inline constexpr std::uint64_t kMemoryBudgetBytes = std::uint64_t{1} << 30;
 // invariant: s^2*w*h*(3*4 + 3) (CV_32FC3 accumulator + one CV_8UC3 output-sized
 // buffer) + 3*w*h (decoded frame) + 2*w*h (reference and current gray).
 std::uint64_t estimatePeakBytes(int width, int height, int scale);
+
+// invariant: working set of the ECC on a graySmall image (jacobian of 8 a-sized float planes
+// plus ~15 a-sized float temporaries, a <= 1024 x 1024), rounded up.
+inline constexpr std::uint64_t kEccWorkBytes = std::uint64_t{96} << 20;
+
+// invariant: max of the two phases of run(), with p = w*h and a = graySmall area:
+//   accumulate: frames*4a (graySmall per frame) + 12p (CV_32FC3 accumulator)
+//               + 6p (decoded + warped frame) + kEccWorkBytes
+//   finalize:   3p (mean) + 3*s^2*p (upscaled output)
+std::uint64_t estimatePeakBytes(int width, int height, int scale, int frames);
+
+// invariant: lab methods.mean, np.mean(dtype=float32).round().astype(uint8): each element of
+// the CV_32FC3 sum of `count` uint8 frames becomes nearbyint(float(sum) / float(count)) (half
+// to even), saturated to [0, 255], in a CV_8UC3 image of the same size.
+void meanRoundHalfEven(const cv::Mat& acc, int count, cv::Mat& out);
 
 // invariant: throws SrError(E_INVALID_ARGUMENT) iff the request breaks the JS API rules.
 void validate(const Request& request);

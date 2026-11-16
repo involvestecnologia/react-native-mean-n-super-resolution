@@ -1,6 +1,7 @@
 #include "Pipeline.h"
 
 #include "Align.h"
+#include "Burst.h"
 #include "Errors.h"
 #include "Paths.h"
 
@@ -8,6 +9,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -69,6 +71,33 @@ std::uint64_t estimatePeakBytes(int width, int height, int scale) {
   const std::uint64_t px = static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
   const std::uint64_t s2 = static_cast<std::uint64_t>(scale) * static_cast<std::uint64_t>(scale);
   return s2 * px * (3 * 4 + 3) + 3 * px + 2 * px;
+}
+
+std::uint64_t estimatePeakBytes(int width, int height, int scale, int frames) {
+  const double s = static_cast<double>(kSmallSide) / std::max(width, height);
+  const std::uint64_t a = static_cast<std::uint64_t>(std::lround(width * s)) *
+                          static_cast<std::uint64_t>(std::lround(height * s));
+  const std::uint64_t p = static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+  const std::uint64_t s2 = static_cast<std::uint64_t>(scale) * static_cast<std::uint64_t>(scale);
+  const std::uint64_t accumulate =
+      static_cast<std::uint64_t>(frames) * 4 * a + 12 * p + 6 * p + kEccWorkBytes;
+  const std::uint64_t finalize = 3 * p + 3 * s2 * p;
+  return std::max(accumulate, finalize);
+}
+
+void meanRoundHalfEven(const cv::Mat& acc, int count, cv::Mat& out) {
+  out.create(acc.size(), CV_8UC3);
+  const float n = static_cast<float>(count);
+  const int width = acc.cols * 3;
+  for (int r = 0; r < acc.rows; ++r) {
+    const float* src = acc.ptr<float>(r);
+    uchar* dst = out.ptr<uchar>(r);
+    for (int c = 0; c < width; ++c) {
+      // why: std::nearbyint rounds half to even in the default rounding mode, like np.round.
+      const float v = std::nearbyint(src[c] / n);
+      dst[c] = static_cast<uchar>(std::clamp(v, 0.0f, 255.0f));
+    }
+  }
 }
 
 Result run(const Request& request) {

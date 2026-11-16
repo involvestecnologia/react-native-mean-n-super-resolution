@@ -274,6 +274,52 @@ TEST(PipelinePreflight, EstimatePeakBytesMatchesFormula) {
   EXPECT_EQ(sr::estimatePeakBytes(2304, 2048, 1), 94371840u);
 }
 
+// Edge case (memory): design formula, max of accumulate and finalize phases.
+TEST(PipelinePreflight, LabEstimateMatchesFormula) {
+  // 4000x3000 -> graySmall 1024x768 (a = 786432), p = 12e6
+  // scale 4, 30 frames: accumulate 30*4a + 18p + 96 MiB = 411035136; finalize 3p + 48p = 612000000
+  EXPECT_EQ(sr::estimatePeakBytes(4000, 3000, 4, 30), 612000000u);
+  // scale 1, 3 frames: accumulate 3*4a + 18p + 96 MiB = 326100480; finalize 6p = 72000000
+  EXPECT_EQ(sr::estimatePeakBytes(4000, 3000, 1, 3), 326100480u);
+}
+
+TEST(PipelinePreflight, LabEstimateBudgetBoundaries) {
+  EXPECT_LT(sr::estimatePeakBytes(4000, 3000, 4, 30), sr::kMemoryBudgetBytes);  // 12 MP
+  EXPECT_GT(sr::estimatePeakBytes(8160, 6120, 4, 30), sr::kMemoryBudgetBytes);  // 50 MP
+  EXPECT_LT(sr::estimatePeakBytes(6000, 4000, 1, 30), sr::kMemoryBudgetBytes);  // 24 MP, 1x
+}
+
+// LP-CORE-07: np.mean(dtype=float32).round() rounds half to even.
+TEST(MeanRoundHalfEven, RoundsHalfToEven) {
+  cv::Mat acc(1, 4, CV_32FC3);
+  const float sums[4] = {5, 7, 9, 11};
+  for (int i = 0; i < 4; ++i) acc.at<cv::Vec3f>(0, i) = cv::Vec3f(sums[i], sums[i], sums[i]);
+  cv::Mat out;
+  sr::meanRoundHalfEven(acc, 2, out);
+  ASSERT_EQ(out.type(), CV_8UC3);
+  const uchar expected[4] = {2, 4, 4, 6};
+  for (int i = 0; i < 4; ++i) EXPECT_EQ(out.at<cv::Vec3b>(0, i)[1], expected[i]) << i;
+}
+
+TEST(MeanRoundHalfEven, DividesByAnyCount) {
+  cv::Mat acc(1, 3, CV_32FC3);
+  acc.at<cv::Vec3f>(0, 0) = cv::Vec3f(15, 21, 0);        // /6 -> 2.5, 3.5, 0
+  acc.at<cv::Vec3f>(0, 1) = cv::Vec3f(16, 20, 6 * 255);  // /6 -> 2.67, 3.33, 255
+  acc.at<cv::Vec3f>(0, 2) = cv::Vec3f(1, 5, 3);          // /6 -> 0.17, 0.83, 0.5
+  cv::Mat out;
+  sr::meanRoundHalfEven(acc, 6, out);
+  EXPECT_EQ(out.at<cv::Vec3b>(0, 0), cv::Vec3b(2, 4, 0));
+  EXPECT_EQ(out.at<cv::Vec3b>(0, 1), cv::Vec3b(3, 3, 255));
+  EXPECT_EQ(out.at<cv::Vec3b>(0, 2), cv::Vec3b(0, 1, 0));
+}
+
+TEST(MeanRoundHalfEven, ThirtyFullFramesStayAt255) {
+  const cv::Mat acc(2, 2, CV_32FC3, cv::Scalar::all(30 * 255));
+  cv::Mat out;
+  sr::meanRoundHalfEven(acc, 30, out);
+  EXPECT_EQ(cv::countNonZero(out.reshape(1) != 255), 0);
+}
+
 TEST(PipelinePreflight, OverBudgetReferenceRejectsInternalWithoutOutput) {
   constexpr int w = 2304, h = 2048;
   ASSERT_GT(sr::estimatePeakBytes(w, h, 4), sr::kMemoryBudgetBytes);
