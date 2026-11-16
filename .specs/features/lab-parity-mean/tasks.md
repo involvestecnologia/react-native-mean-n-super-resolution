@@ -356,6 +356,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: none · **Gate**: build
 **Commit**: `docs: document lab-parity mean pipeline and migration`
+**Status**: ✅ Done (HASH) — README: pipeline steps (lab `mean_N` + `bicubic_x2`), options `n`/`blur`/`scale` (default 1)/`outputPath` and result fields checked against `src/types.ts`, drop-reason table, error table (3–30, `n`, `blur`, size check before alignment, drop list, thin frames), memory formula with 12 MP / 48 MP examples from `estimatePeakBytes`, `yarn test:parity`, migration section, credits. CLAUDE.md: Project line, `test:parity` command, ECC via vendored copy only (no "translation-only" left), `Burst`/`vendor/Ecc` in the pipeline list. STATE: AD-004 trade-off marked amended by AD-006. *(Changed during T15: the README names burst-sr-lab without a link (its repo is not public); the vendored ECC is credited under its upstream Intel License header, not Apache 2.0. README already failed `prettier --check` before T15; left as is.)*
 
 ---
 

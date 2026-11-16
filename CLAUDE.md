@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`react-native-mean-n-super-resolution`: a React Native library exposing `superResolve(paths, options?)`, which aligns 5, 15 or 30 same-size local image files to `paths[0]`, upscales them (scale 1–4, default 2) and averages them with OpenCV, writing the result to a file. Scaffolded with `create-react-native-library` (type `turbo-module`, language `cpp`). README documents the public API and `E_*` error codes.
+`react-native-mean-n-super-resolution`: a React Native library exposing `superResolve(paths, options?)`, a port of burst-sr-lab's `mean_N` + bicubic: on 3–30 same-size local image files it drops blurry frames (`blur`), picks the sharpest early frame as reference, aligns the others with phase correlation + ECC homography, averages the `n` closest (default 8) and upscales the mean (`scale` 1–4, default 1) with OpenCV, writing the result to a file and returning `refIndex`/`used`/`dropped`. Scaffolded with `create-react-native-library` (type `turbo-module`, language `cpp`). README documents the public API and `E_*` error codes.
 
 ## Commands
 
@@ -18,6 +18,7 @@ yarn test                 # jest (preset @react-native/jest-preset)
 yarn test path/to/file    # single test file; add -t "name" for a single test
 yarn test:native          # host C++ GoogleTest suite (scripts/test-native.mjs: finds cmake on PATH or ANDROID_HOME/cmake, Ninja, MSVC via vswhere on Windows)
 yarn test:native -R Align # extra args go to ctest; run build/native-tests/sr_tests(.exe) directly to see test stdout
+LAB_DIR=~/repos/burst-sr-lab yarn test:parity  # local only: builds sr_parity_cli, compares native vs lab Python (scripts/parity/, needs python3 + cv2 + numpy); --sessions DIR for field data
 yarn prepare              # bob build -> lib/ (ESM module + .d.ts)
 yarn clean                # remove lib/ and native build dirs
 yarn example start        # Metro for example app
@@ -35,7 +36,7 @@ This is a **pure C++ TurboModule** (New Architecture only, no Kotlin/Obj-C modul
 
 1. **Spec** — `src/NativeMeanNSuperResolution.ts`. The `Spec` interface is the codegen source (`codegenConfig` in `package.json`, name `MeanNSuperResolutionSpec`, `jsSrcsDir: src`). Codegen generates `MeanNSuperResolutionSpecJSI.h` containing the base class `NativeMeanNSuperResolutionCxxSpec<T>`.
 2. **C++ TurboModule adapter** — `cpp/MeanNSuperResolutionImpl.{h,cpp}`. Subclasses the generated spec; each spec method takes `jsi::Runtime&` first and C++ types matching the TS signature (codegen errors surface as compile errors here, not in TS). `superResolve` returns `AsyncPromise<…>` and runs the work on a detached worker thread (must not capture `this`); errors map to `"E_CODE: message"` via `cpp/sr/ErrorMapping`.
-   - **Pipeline** — `cpp/sr/` (Validate, Paths, Align, Pipeline, Errors) is JSI-free and covered by host tests in `cpp/tests/` (AD-003). Platform hooks sit behind `cpp/platform/TempDir.h` (impls: `ios/TempDir.mm`, `android/src/TempDir.cpp`, `cpp/tests/TempDirHost.cpp`).
+   - **Pipeline** — `cpp/sr/` (Validate, Paths, Burst, Align, Pipeline, Errors, `vendor/Ecc`) is JSI-free and covered by host tests in `cpp/tests/` (AD-003). Platform hooks sit behind `cpp/platform/TempDir.h` (impls: `ios/TempDir.mm`, `android/src/TempDir.cpp`, `cpp/tests/TempDirHost.cpp`).
 3. **Platform registration** (shared C++ is compiled by both platforms):
    - iOS: `ios/OnLoad.mm` registers the module in `+load` via `registerCxxModuleToGlobalModuleMap`. `MeanNSuperResolution.podspec` compiles `ios/**` and `cpp/**`.
    - Android: `react-native.config.js` (`cxxModuleCMakeListsPath`, `cxxModuleHeaderName`) tells RN autolinking to build `android/CMakeLists.txt` and instantiate `MeanNSuperResolutionImpl`. CMakeLists links `jsi`, `reactnative`, `react_codegen_MeanNSuperResolutionSpec`. New `.cpp` files must be added to `add_library` here (the podspec picks them up via glob).
@@ -44,7 +45,7 @@ This is a **pure C++ TurboModule** (New Architecture only, no Kotlin/Obj-C modul
 ### OpenCV
 
 - opencv-mobile prebuilt packages, version + per-platform URL + SHA-256 pinned in root `opencv.json` (AD-002). Downloaded at build time into gitignored `.opencv/<version>/<platform>/` by `cmake/OpenCVMobile.cmake` (Android CMake, host tests) and by Ruby in the podspec (iOS, runs at spec evaluation). Env `OPENCV_MOBILE_DIR` skips download/hash checks.
-- Built with `-fno-exceptions`: OpenCV errors **abort the process**; `catch (cv::Exception)` never fires. Guard every input before calling OpenCV and keep the 1 GiB memory pre-flight (AD-004). This is also why alignment is translation-only `phaseCorrelate`, not ECC.
+- Built with `-fno-exceptions`: OpenCV errors **abort the process**; `catch (cv::Exception)` never fires. Guard every input before calling OpenCV and keep the 1 GiB memory pre-flight (AD-004). ECC is allowed only through the vendored copy `sr::vendor::eccHomography` (`cpp/sr/vendor/Ecc.cpp`, OpenCV 4.14.0, returns failure instead of `CV_Error`; AD-006). Never call `cv::findTransformECC` directly, and re-sync the vendored file when `opencv.json` bumps OpenCV.
 - Image I/O comes from `<opencv2/highgui.hpp>` (no imgcodecs). Encode via `imencode` with a lower-cased extension (opencv-mobile rejects mixed case); `phaseCorrelate` can overwrite its inputs, so pass copies.
 - Android needs NDK r30+ (AD-005); `android/CMakeLists.txt` fails fast below it. The example works around an RN 0.88 Windows bug (backslash paths in `Android-autolinking.cmake`) in `example/android/app/build.gradle`.
 

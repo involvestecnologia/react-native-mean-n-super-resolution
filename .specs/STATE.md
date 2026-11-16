@@ -29,7 +29,7 @@
 ### AD-004
 - **Decision**: Native code must never rely on catching `cv::Exception`: opencv-mobile is built with `-fno-exceptions`, so OpenCV assertion failures abort the process. Every OpenCV call is preceded by input guards (non-empty, expected type, positive sizes, finite matrices) and allocation-heavy steps by a memory pre-flight budget.
 - **Reason**: Owner chose to keep opencv-mobile (AD-002) rather than build/ship OpenCV with exceptions (2026-11-11).
-- **Trade-off**: No ECC (`findTransformECC` asserts internally) — alignment is translation-only; residual crash risk for unforeseen OpenCV asserts.
+- **Trade-off**: No ECC (`findTransformECC` asserts internally) — alignment is translation-only; residual crash risk for unforeseen OpenCV asserts. *(Amended 2026-11-16 by AD-006: ECC homography is allowed through the vendored `sr::vendor::eccHomography` only; `cv::findTransformECC` stays forbidden.)*
 - **Scope**: All native code calling OpenCV.
 - **Date**: 2026-11-11
 - **Status**: active
