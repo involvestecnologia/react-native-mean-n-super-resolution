@@ -3,7 +3,7 @@ import type { FrameCount } from './frameCounts';
 
 export type CameraRun = {
   result: SuperResolveResult;
-  // invariant: capture order; paths[0] is the reference frame.
+  // invariant: capture order; result.refIndex and result.used index into it.
   paths: string[];
   requested: FrameCount;
   // why: measures superResolve only, so capture speed does not skew the number.

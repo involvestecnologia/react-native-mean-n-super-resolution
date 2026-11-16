@@ -11,6 +11,7 @@ import {
   type CameraRef,
 } from 'react-native-vision-camera';
 import { createBurstRunner } from '../burst/burstRunner';
+import { mergeSummary } from '../burst/mergeSummary';
 import {
   DEFAULT_FRAME_COUNT,
   FRAME_COUNTS,
@@ -52,7 +53,8 @@ const runner = createBurstRunner({
     return path;
   },
   deleteFiles,
-  superResolve: (paths) => superResolve(paths),
+  // why: merge every captured frame (lab mean_N with N = count); the default n is 8.
+  superResolve: (paths) => superResolve(paths, { n: paths.length }),
   now: () => Date.now(),
 });
 
@@ -120,7 +122,7 @@ export default function CameraScreen({
     if (outcome.ok) {
       const { run } = outcome;
       console.log(
-        `[camera-burst] ok N=${run.requested} out=${run.result.width}x${run.result.height} framesUsed=${run.result.framesUsed} ms=${run.elapsedMs} ref=${run.paths[0]}`
+        `[camera-burst] ok N=${run.requested} out=${run.result.width}x${run.result.height} framesUsed=${run.result.framesUsed} ms=${run.elapsedMs} ${mergeSummary(run.result).join(' | ')} ref=${run.paths[run.result.refIndex]}`
       );
     } else {
       console.log(`[camera-burst] ${outcome.stage} failed: ${outcome.message}`);
