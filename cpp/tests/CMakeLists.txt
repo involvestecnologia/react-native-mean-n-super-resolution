@@ -45,6 +45,7 @@ add_executable(sr_tests
   error_mapping_test.cpp
   ecc_test.cpp
   burst_test.cpp
+  warp_test.cpp
 )
 target_link_libraries(sr_tests PRIVATE sr_core GTest::gtest_main)
 

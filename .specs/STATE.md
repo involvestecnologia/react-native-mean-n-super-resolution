@@ -53,10 +53,10 @@
 ## Handoff
 
 - **Feature**: `.specs/features/lab-parity-mean` (port burst-sr-lab `mean_N` + bicubic; breaking API)
-- **Phase / Task**: Execute — T1–T4 done; next T5 (tasks approved 2026-11-16)
+- **Phase / Task**: Execute — T1–T5 done; next T6 + T7 (tasks approved 2026-11-16)
 - **Completed**: spec.md (owner-confirmed 2026-11-16), context.md, design.md (approved 2026-11-16), tasks.md, ECC spike (results in design.md), macOS host link fix in `cmake/OpenCVMobile.cmake`
 - **In-progress** (file:line): none
-- **Next step**: T5 estimateWarp (`cpp/sr/Align.*`), T6/T7 in parallel, then T8
+- **Next step**: T6 validation, T7 mean + memory estimate, then T8 run (removes estimateTransform)
 - **Blockers**: none (field sessions of 2026-10-28 not on this machine: parity on field data is an open evidence gap)
 - **Uncommitted files**: none
 - **Branch**: feat/lab-parity-mean

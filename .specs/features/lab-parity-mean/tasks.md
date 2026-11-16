@@ -150,14 +150,14 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add lab reference choice and temporal order`
-**Status**: ✅ Done — `yarn test:native` 70/70; Reference.* 4, TemporalOrder.* 3 tests; expected values cross-checked with np.argmax / sorted in Python
+**Status**: ✅ Done (5d280db) — `yarn test:native` 70/70; Reference.* 4, TemporalOrder.* 3 tests; expected values cross-checked with np.argmax / sorted in Python
 
 ---
 
 ### T5: `estimateWarp` (phaseCorrelate + ECC)
 
-**What**: Replace `estimateTransform` with `estimateWarp` + `dropReason` per design; delete the NCC acceptance code and its tests.
-**Where**: `cpp/sr/Align.h`, `cpp/sr/Align.cpp`, `cpp/tests/align_test.cpp`
+**What**: Add `estimateWarp` + `dropReason` per design next to `estimateTransform`. *(Changed during T5: deleting `estimateTransform` here would break `Pipeline.cpp` until T8, so T8 removes it together with `align_test.cpp`.)*
+**Where**: `cpp/sr/Align.h`, `cpp/sr/Align.cpp`, `cpp/tests/warp_test.cpp`
 **Depends on**: T1, T2
 **Requirement**: LP-CORE-04, LP-CORE-05, edge cases "flat", "non-finite shift"
 
@@ -166,10 +166,11 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 - [ ] Uncorrelated frame → `LowCorrelation`, reason matches `^ECC cc 0\.\d{3} < 0\.9, dropped$`
 - [ ] Flat frame → `NoConvergence`, reason exactly `ECC did not converge, dropped`
 - [ ] 1×N gray input does not reach OpenCV (guard) → `NoConvergence`
-- [ ] `H = S⁻¹·H·S` computed in float32 (test compares with the same product done in the test)
+- [ ] `H` returned as CV_32F *(the planned "same product in the test" check would only restate the code; precision is covered by the corner test and, against the lab, by T13)*
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): align frames with phase correlation and ecc homography`
+**Status**: ✅ Done — `yarn test:native` 77/77; EstimateWarp.* 7 tests. Measured: corner error 0.027 px vs truth (shift + 0.3° + 0.2 % scale, 2048×1536), noisy frame cc 0.85, unrelated scene cc 0.43 (both LowCorrelation)
 
 ---
 
@@ -211,6 +212,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 **What**: Rewrite `sr::run` per design flow (pass 1, filter, reference, order, pre-flight, pass 2 until `n`, mean, release, bicubic, encode), filling `Result` and optional `Trace`.
 **Where**: `cpp/sr/Pipeline.cpp`, `cpp/tests/pipeline_test.cpp`, `cpp/tests/fixtures.{h,cpp}`
 **Depends on**: T3, T4, T5, T6, T7
+**Also**: remove `estimateTransform` from `Align.*` and delete `cpp/tests/align_test.cpp` (moved here from T5); move any still-relevant pipeline cases from it into `pipeline_test.cpp`
 **Requirement**: LP-CORE-06, LP-CORE-08, LP-CORE-09, LP-API-01 (C++ fields), LP-API-07
 
 **Done when**:
