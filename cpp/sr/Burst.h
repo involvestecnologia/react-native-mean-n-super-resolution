@@ -33,4 +33,12 @@ inline constexpr int kMinKeep = 3;
 std::vector<int> applyBlurFilter(const std::vector<double>& sharp, double ratio,
                                  std::vector<Drop>& dropped);
 
+// invariant: lab align.pick_ref(first=8). Index (into sharp) of the sharpest frame among the
+// first 8 entries of `kept` (kept non-empty); the earliest wins on ties, like np.argmax.
+int pickReference(const std::vector<int>& kept, const std::vector<double>& sharp);
+
+// invariant: lab run.py ordering. `kept` sorted by |index - ref|, earlier index first on ties
+// (stable sort of an ascending list); ref comes first.
+std::vector<int> temporalOrder(const std::vector<int>& kept, int ref);
+
 }  // namespace sr

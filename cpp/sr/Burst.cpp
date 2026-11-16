@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 namespace sr {
 
@@ -57,6 +58,22 @@ std::vector<int> applyBlurFilter(const std::vector<double>& sharp, double ratio,
   if (static_cast<int>(kept.size()) < kMinKeep) return all;
   dropped.insert(dropped.end(), drops.begin(), drops.end());
   return kept;
+}
+
+int pickReference(const std::vector<int>& kept, const std::vector<double>& sharp) {
+  constexpr size_t kFirst = 8;
+  int best = kept[0];
+  for (size_t k = 1; k < std::min(kept.size(), kFirst); ++k) {
+    if (sharp[kept[k]] > sharp[best]) best = kept[k];
+  }
+  return best;
+}
+
+std::vector<int> temporalOrder(const std::vector<int>& kept, int ref) {
+  std::vector<int> order = kept;
+  std::stable_sort(order.begin(), order.end(),
+                   [ref](int a, int b) { return std::abs(a - ref) < std::abs(b - ref); });
+  return order;
 }
 
 }  // namespace sr

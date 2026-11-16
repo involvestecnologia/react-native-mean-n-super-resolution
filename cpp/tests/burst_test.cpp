@@ -139,3 +139,43 @@ TEST(BlurFilter, AppendsToExistingDrops) {
   EXPECT_EQ(dropped[0].reason, "earlier");
   EXPECT_EQ(dropped[1].index, 3);
 }
+
+// LP-CORE-02: only the first 8 survivors compete for the reference.
+TEST(Reference, IgnoresSurvivorsBeyondTheFirstEight) {
+  const std::vector<double> sharp = {5, 6, 7, 9, 4, 3, 2, 1, 100, 100};
+  const std::vector<int> kept = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+  EXPECT_EQ(sr::pickReference(kept, sharp), 3);
+}
+
+// LP-CORE-02: positions count after the filter, and the result is an index into paths.
+TEST(Reference, CountsTheFirstEightAfterTheFilter) {
+  // index 1 was dropped by the filter, so kept[7] is index 8 and competes
+  const std::vector<double> sharp = {5, 0, 6, 7, 1, 1, 1, 1, 50, 99};
+  const std::vector<int> kept = {0, 2, 3, 4, 5, 6, 7, 8, 9};
+  EXPECT_EQ(sr::pickReference(kept, sharp), 8);
+}
+
+TEST(Reference, EarliestWinsOnTies) {
+  const std::vector<double> sharp = {3, 9, 9, 1};
+  EXPECT_EQ(sr::pickReference({0, 1, 2, 3}, sharp), 1);
+}
+
+// Edge case: fewer than 8 survivors.
+TEST(Reference, ChoosesAmongAllWhenFewerThanEight) {
+  const std::vector<double> sharp = {1, 2, 8};
+  EXPECT_EQ(sr::pickReference({0, 1, 2}, sharp), 2);
+}
+
+// LP-CORE-03: distances 0,1,2,3,3,4; tie between 1 and 7 goes to the lower index.
+TEST(TemporalOrder, SortsByDistanceToTheReference) {
+  EXPECT_EQ(sr::temporalOrder({0, 1, 2, 4, 5, 7}, 4), (std::vector<int>{4, 5, 2, 1, 7, 0}));
+}
+
+TEST(TemporalOrder, ReferenceAtTheStartKeepsAscendingOrder) {
+  EXPECT_EQ(sr::temporalOrder({0, 1, 2, 3}, 0), (std::vector<int>{0, 1, 2, 3}));
+}
+
+TEST(TemporalOrder, MatchesTheLabOnASymmetricBurst) {
+  // lab: sorted(range(7), key=lambda i: abs(i - 3)) == [3, 2, 4, 1, 5, 0, 6]
+  EXPECT_EQ(sr::temporalOrder({0, 1, 2, 3, 4, 5, 6}, 3), (std::vector<int>{3, 2, 4, 1, 5, 0, 6}));
+}

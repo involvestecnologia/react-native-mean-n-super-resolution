@@ -132,7 +132,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add lab blur frame filter`
-**Status**: ✅ Done — `yarn test:native` 63/63; BlurFilter.* 6 tests; reason strings cross-checked against the lab f-strings with numpy
+**Status**: ✅ Done (17939bb) — `yarn test:native` 63/63; BlurFilter.* 6 tests; reason strings cross-checked against the lab f-strings with numpy
 
 ---
 
@@ -150,6 +150,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add lab reference choice and temporal order`
+**Status**: ✅ Done — `yarn test:native` 70/70; Reference.* 4, TemporalOrder.* 3 tests; expected values cross-checked with np.argmax / sorted in Python
 
 ---
 
