@@ -7,8 +7,18 @@
 
 namespace sr {
 
+// invariant: bounds shared with src/validate.ts (LP-API-02..04).
+inline constexpr int kMinFrames = 3;
+inline constexpr int kMaxFrames = 30;
+inline constexpr int kMinN = 2;
+inline constexpr int kMaxN = 30;
+
 struct Request {
   std::vector<std::string> paths;
+  // invariant: frames averaged, reference included (lab mean_N); fewer if fewer align.
+  int n = 8;
+  // invariant: blur filter ratio (lab filters.blur); 0 turns the filter off.
+  double blur = 0.8;
   int scale = 2;
   std::optional<std::string> outputPath;
   std::string defaultOutputDir;

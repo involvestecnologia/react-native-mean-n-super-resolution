@@ -170,13 +170,13 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): align frames with phase correlation and ecc homography`
-**Status**: ✅ Done — `yarn test:native` 77/77; EstimateWarp.* 7 tests. Measured: corner error 0.027 px vs truth (shift + 0.3° + 0.2 % scale, 2048×1536), noisy frame cc 0.85, unrelated scene cc 0.43 (both LowCorrelation)
+**Status**: ✅ Done (4395b0f) — `yarn test:native` 77/77; EstimateWarp.* 7 tests. Measured: corner error 0.027 px vs truth (shift + 0.3° + 0.2 % scale, 2048×1536), noisy frame cc 0.85, unrelated scene cc 0.43 (both LowCorrelation)
 
 ---
 
 ### T6: Request/Result types and C++ validation [P]
 
-**What**: New `Request`/`Result`/`Drop`/`Trace` per design; `sr::validate` with the new rules.
+**What**: `Request` gains `n` and `blur`; `sr::validate` with the new rules. *(Changed during T6: the new `Result` fields, `Trace` and the `scale` default 2 → 1 change `run` behavior, so they move to T8; `Drop` already exists from T3.)*
 **Where**: `cpp/sr/Pipeline.h`, `cpp/sr/Validate.cpp`, `cpp/tests/validate_test.cpp`
 **Depends on**: T2 (for `Drop`)
 **Requirement**: LP-API-02..05 (C++ side), LP-API-06
@@ -184,10 +184,11 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 **Done when**:
 - [ ] Accepts 3 and 30 paths; rejects 2 and 31 with `E_INVALID_ARGUMENT`
 - [ ] `n`: 2 and 30 ok; 1, 31 rejected. `blur`: 0, 0.8, 1 ok; −0.01, 1.01, NaN, inf rejected. `scale` 1..4 ok, 0/5 rejected. Bad extension rejected
-- [ ] Each rejection message is asserted literally (the same strings T9 uses in Jest)
+- [ ] New-rule messages asserted literally: `paths must contain 3 to 30 entries, got N`, `n must be an integer from 2 to 30, got N`, `blur must be a number from 0 to 1, got X`; T9 uses the same prefixes in JS (the shown value may differ, e.g. NaN). Messages of unchanged rules stay as they are
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native)!: validate lab options n and blur and free frame count`
+**Status**: ✅ Done — `yarn test:native` 83/83; Validate.* 13 tests
 
 ---
 
@@ -212,6 +213,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 **What**: Rewrite `sr::run` per design flow (pass 1, filter, reference, order, pre-flight, pass 2 until `n`, mean, release, bicubic, encode), filling `Result` and optional `Trace`.
 **Where**: `cpp/sr/Pipeline.cpp`, `cpp/tests/pipeline_test.cpp`, `cpp/tests/fixtures.{h,cpp}`
 **Depends on**: T3, T4, T5, T6, T7
+**Also from T6**: `Result` fields (`refIndex`, `used`, `dropped`), `Trace`, `Request::scale` default 1
 **Also**: remove `estimateTransform` from `Align.*` and delete `cpp/tests/align_test.cpp` (moved here from T5); move any still-relevant pipeline cases from it into `pipeline_test.cpp`
 **Requirement**: LP-CORE-06, LP-CORE-08, LP-CORE-09, LP-API-01 (C++ fields), LP-API-07
 
