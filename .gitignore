@@ -79,3 +79,6 @@ nitrogen/
 .opencv/
 /build/
 .tlc
+
+# python bytecode (scripts/parity)
+__pycache__/
