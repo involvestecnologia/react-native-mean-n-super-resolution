@@ -28,6 +28,7 @@ add_library(sr_core STATIC
   ${SR_DIR}/Paths.cpp
   ${SR_DIR}/Pipeline.cpp
   ${SR_DIR}/Validate.cpp
+  ${SR_DIR}/vendor/Ecc.cpp
   TempDirHost.cpp
 )
 target_include_directories(sr_core PUBLIC ${SR_DIR})
@@ -41,6 +42,7 @@ add_executable(sr_tests
   pipeline_test.cpp
   align_test.cpp
   error_mapping_test.cpp
+  ecc_test.cpp
 )
 target_link_libraries(sr_tests PRIVATE sr_core GTest::gtest_main)
 

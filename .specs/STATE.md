@@ -42,13 +42,21 @@
 - **Date**: 2026-11-12
 - **Status**: active
 
+### AD-006
+- **Decision**: Frame alignment uses a vendored copy of OpenCV 4.14.0's ECC homography (`cpp/sr/vendor/Ecc.cpp`, homography path only) whose non-convergence returns a failure instead of raising `CV_Error`. Amends AD-004's trade-off "No ECC": ECC is allowed through this copy only; calling `cv::findTransformECC` directly stays forbidden.
+- **Reason**: Owner chose lab parity with burst-sr-lab `mean_N` (2026-11-16), which aligns with ECC `MOTION_HOMOGRAPHY`. Spike (lab-parity-mean design.md): vendored copy is bit-identical to the library function; flat input and off-image guesses return failure without abort; Python cv2 4.12 vs C++ 4.14 differ by ~1e-6 px.
+- **Trade-off**: ~300 lines of upstream code to re-sync when `opencv.json` bumps OpenCV; AD-004 guards still apply to everything else.
+- **Scope**: `cpp/sr/Align.*`, `cpp/sr/vendor/**`.
+- **Date**: 2026-11-16
+- **Status**: active
+
 ## Handoff
 
-- **Feature**: `.specs/features/example-camera-burst`
-- **Phase / Task**: Done — validation PASS (iteration 2)
-- **Completed**: T1–T7, UAT fixes d3d30e2/859da98, verifier fixes 4c2ef45/defe18f/cdc85a6
+- **Feature**: `.specs/features/lab-parity-mean` (port burst-sr-lab `mean_N` + bicubic; breaking API)
+- **Phase / Task**: Execute — T1, T2 done (uncommitted); next T3 (tasks approved 2026-11-16)
+- **Completed**: spec.md (owner-confirmed 2026-11-16), context.md, design.md (approved 2026-11-16), tasks.md, ECC spike (results in design.md), macOS host link fix in `cmake/OpenCVMobile.cmake`
 - **In-progress** (file:line): none
-- **Next step**: Review/merge PR #1 (base `feat/opencv-super-resolution`; retarget to `main` after that branch merges); watch CI
-- **Blockers**: none (notes: CAM-12 code-review only; AVD virtual scene, no real handheld burst; iOS deferred)
-- **Uncommitted files**: none
-- **Branch**: feat/example-camera-burst
+- **Next step**: T3 blur filter (`cpp/sr/Burst.*`), then T4; AD-006 recorded
+- **Blockers**: none (field sessions of 2026-10-28 not on this machine: parity on field data is an open evidence gap)
+- **Uncommitted files**: `.specs/features/lab-parity-mean/`, `.specs/STATE.md`, `cmake/OpenCVMobile.cmake`, `cpp/sr/vendor/Ecc.*`, `cpp/sr/Burst.*`, `cpp/tests/{ecc,burst}_test.cpp`, `cpp/tests/CMakeLists.txt`, `android/CMakeLists.txt`
+- **Branch**: feat/lab-parity-mean

@@ -29,6 +29,7 @@ add_library(
     ../cpp/sr/Paths.cpp
     ../cpp/sr/Pipeline.cpp
     ../cpp/sr/Validate.cpp
+    ../cpp/sr/vendor/Ecc.cpp
     src/TempDir.cpp
 )
 
