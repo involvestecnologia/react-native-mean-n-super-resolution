@@ -95,7 +95,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): vendor opencv ecc homography without aborting errors`
-**Status**: ✅ Done (uncommitted) — `yarn test:native` 57/57; Ecc.* 5 tests
+**Status**: ✅ Done (3efe012) — `yarn test:native` 57/57; Ecc.* 5 tests
 
 ---
 
@@ -113,7 +113,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add lab gray image and sharpness helpers`
-**Status**: ✅ Done (uncommitted) — `yarn test:native` 57/57; Burst.* 6 tests
+**Status**: ✅ Done (dc99000) — `yarn test:native` 57/57; Burst.* 6 tests
 
 ---
 
@@ -127,11 +127,12 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 **Done when**:
 - [ ] `{10,10,10,10,4}` at 0.8 → drops index 4 with reason exactly `sharpness 0.40 of median < 0.8, dropped (blur)`
 - [ ] Even count median: `{1,2,3,4}` median 2.5 (a value of 1.9 at 0.8 → dropped, 2.0 → kept)
-- [ ] `{10,1,1,1}` at 0.8 (would keep 1) → nothing dropped; ratio 0 → nothing dropped; ratio 0.85 formats as `< 0.85`
+- [ ] `{10,10,1,1}` at 0.8 (median 5.5, would keep 2) → nothing dropped; ratio 0 → nothing dropped; ratio 0.85 formats as `< 0.85` *(example corrected during T3: `{10,1,1,1}` has median 1 and drops nothing)*
 - [ ] Kept indices are in ascending original order
 
 **Tests**: unit · **Gate**: quick (native)
 **Commit**: `feat(native): add lab blur frame filter`
+**Status**: ✅ Done — `yarn test:native` 63/63; BlurFilter.* 6 tests; reason strings cross-checked against the lab f-strings with numpy
 
 ---
 
