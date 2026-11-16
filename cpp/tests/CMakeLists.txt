@@ -48,5 +48,9 @@ add_executable(sr_tests
 )
 target_link_libraries(sr_tests PRIVATE sr_core GTest::gtest_main)
 
+# invariant: parity harness only (scripts/parity, lab-parity-mean T11); not a ctest.
+add_executable(sr_parity_cli parity_cli.cpp)
+target_link_libraries(sr_parity_cli PRIVATE sr_core)
+
 include(GoogleTest)
 gtest_discover_tests(sr_tests)
