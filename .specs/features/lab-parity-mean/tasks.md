@@ -269,6 +269,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: build + UAT · **Gate**: full
 **Commit**: `feat(turbomodule): bridge lab options and merge metadata`
+**Status**: ⚠️ Partial — Android build ✅ (`app:bundleDebug`, arm64-v8a, 5m52s, 2026-11-16; codegen regenerated `Options<n, blur, scale, outputPath>`, `Dropped<index, reason>`, `Result<…, refIndex, used, dropped>`; adapter compiled and linked). Open (L-005): example run on an Android device logging `refIndex`/`used`/`dropped` (no device attached), iOS CI `build-ios`. *(Build ran as `sh ./gradlew …` because `example/android/gradlew` is committed as 100644 and `yarn turbo run build:android` fails locally with EACCES; pre-existing, not fixed here.)* `Burst.cpp`/`vendor/Ecc.cpp` were already in `android/CMakeLists.txt` (T1/T2).
 
 ---
 
