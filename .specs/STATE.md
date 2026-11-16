@@ -54,7 +54,7 @@
 
 - **Feature**: `.specs/features/lab-parity-mean` (port burst-sr-lab `mean_N` + bicubic; breaking API)
 - **Phase / Task**: Execute — T1–T9 done, T10 partial (Android device UAT + iOS CI open); T11 done; next T12 (tasks approved 2026-11-16)
-- **Completed**: spec/context/design/tasks (dffe611), macOS host link fix (d3045a6), T1 3efe012, T2 dc99000, T3 17939bb, T4 5d280db, T5 4395b0f, T6 a279a3f, T7 d96fda3, T8 418f7c4, T9 2ed388f, T10 3a3e38a (partial); `yarn test:native` 86/86, `yarn test` 89/89. Per-task notes and deviations in tasks.md `Status` lines. Lab reference code: `~/repos/burst-sr-lab` (LAB_DIR for T12/T13)
+- **Completed**: spec/context/design/tasks (dffe611), macOS host link fix (d3045a6), T1 3efe012, T2 dc99000, T3 17939bb, T4 5d280db, T5 4395b0f, T6 a279a3f, T7 d96fda3, T8 418f7c4, T9 2ed388f, T10 3a3e38a (partial), T11 e772c89; `yarn test:native` 86/86, `yarn test` 89/89. Per-task notes and deviations in tasks.md `Status` lines. Lab reference code: `~/repos/burst-sr-lab` (LAB_DIR for T12/T13)
 - **In-progress** (file:line): none
 - **Next step**: T12 synthetic bursts + lab golden (`scripts/parity/`), then T13; T10 device UAT when an Android device is connected (`yarn example android`, check `[camera-burst]` log), iOS via CI
 - **Blockers**: none; `example/android/gradlew` is 100644 in git (local `yarn turbo run build:android` fails with EACCES; use `sh ./gradlew`) (field sessions of 2026-10-28 not on this machine: parity on field data is an open evidence gap)

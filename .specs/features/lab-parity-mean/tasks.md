@@ -286,7 +286,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: smoke run · **Gate**: quick (native)
 **Commit**: `test(parity): add native parity cli`
-**Status**: ✅ Done — built by `yarn test:native` (86/86 still pass). Smoke run on 10 synthetic 1600×1200 JPEGs (shifts, frame 3 blurred, frame 6 rotated): exit 0, `native.json` valid (`json.tool`), refIndex 5, dropped 3 (blur 0.22) and 6 (ECC cc 0.021), 8 used, `mean.png` 1600×1200, `mean_x2.png` 3200×2400, 15 s. Errors: `SrError` → stderr + exit 1, bad usage → exit 2. *(Also: `--blur B` option; `mean_x2.png` comes from a second `sr::run` at scale 2 so the native bicubic path is what gets compared; JSON also carries width/height.)*
+**Status**: ✅ Done (e772c89) — built by `yarn test:native` (86/86 still pass). Smoke run on 10 synthetic 1600×1200 JPEGs (shifts, frame 3 blurred, frame 6 rotated): exit 0, `native.json` valid (`json.tool`), refIndex 5, dropped 3 (blur 0.22) and 6 (ECC cc 0.021), 8 used, `mean.png` 1600×1200, `mean_x2.png` 3200×2400, 15 s. Errors: `SrError` → stderr + exit 1, bad usage → exit 2. *(Also: `--blur B` option; `mean_x2.png` comes from a second `sr::run` at scale 2 so the native bicubic path is what gets compared; JSON also carries width/height.)*
 
 ---
 
