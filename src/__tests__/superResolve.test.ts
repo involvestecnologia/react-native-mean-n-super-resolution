@@ -22,7 +22,10 @@ const nativeResult = {
   path: 'file:///tmp/superres-1.jpg',
   width: 200,
   height: 100,
-  framesUsed: 5,
+  framesUsed: 4,
+  refIndex: 1,
+  used: [1, 0, 2, 4],
+  dropped: [{ index: 3, reason: 'ECC did not converge, dropped' }],
 };
 
 beforeEach(() => {
@@ -35,15 +38,21 @@ async function expectInvalidArgument(call: () => Promise<unknown>) {
   expect(mockNativeSuperResolve).not.toHaveBeenCalled();
 }
 
-describe('superResolve argument validation (SR-ERR-01)', () => {
-  it.each([0, 1, 4, 6, 14, 16, 29, 31])(
+describe('superResolve argument validation (SR-ERR-01, LP-API-02)', () => {
+  it.each([0, 1, 2, 31, 60])(
     'rejects %i paths without calling native',
     async (n) => {
       await expectInvalidArgument(() => superResolve(pathsOf(n)));
     }
   );
 
-  it.each([5, 15, 30])('accepts %i paths', async (n) => {
+  it('names the allowed range in the message', async () => {
+    await expect(superResolve(pathsOf(2))).rejects.toThrow(
+      'E_INVALID_ARGUMENT: paths must contain 3 to 30 entries, got 2'
+    );
+  });
+
+  it.each([3, 4, 5, 8, 15, 29, 30])('accepts %i paths', async (n) => {
     await expect(superResolve(pathsOf(n))).resolves.toEqual(nativeResult);
     expect(mockNativeSuperResolve).toHaveBeenCalledTimes(1);
   });
@@ -67,6 +76,55 @@ describe('superResolve argument validation (SR-ERR-01)', () => {
     const paths = [...fivePaths];
     paths[4] = '';
     await expectInvalidArgument(() => superResolve(paths));
+  });
+});
+
+describe('superResolve n validation (LP-API-03)', () => {
+  it.each([0, 1, 31, -8, 2.5, NaN, Infinity, '8', null])(
+    'rejects n %p',
+    async (n) => {
+      await expectInvalidArgument(() =>
+        superResolve(fivePaths, { n: n as never })
+      );
+    }
+  );
+
+  it('names the allowed range in the message', async () => {
+    await expect(superResolve(fivePaths, { n: 31 })).rejects.toThrow(
+      'E_INVALID_ARGUMENT: n must be an integer from 2 to 30, got 31'
+    );
+  });
+
+  it.each([2, 8, 30])('accepts n %i', async (n) => {
+    await superResolve(fivePaths, { n });
+    expect(mockNativeSuperResolve).toHaveBeenCalledWith(fivePaths, { n });
+  });
+
+  it('accepts n larger than the burst', async () => {
+    await superResolve(pathsOf(3), { n: 30 });
+    expect(mockNativeSuperResolve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('superResolve blur validation (LP-API-04)', () => {
+  it.each([-0.01, 1.01, NaN, Infinity, -Infinity, '0.8', null])(
+    'rejects blur %p',
+    async (blur) => {
+      await expectInvalidArgument(() =>
+        superResolve(fivePaths, { blur: blur as never })
+      );
+    }
+  );
+
+  it('names the allowed range in the message', async () => {
+    await expect(superResolve(fivePaths, { blur: 1.5 })).rejects.toThrow(
+      'E_INVALID_ARGUMENT: blur must be a number from 0 to 1, got 1.5'
+    );
+  });
+
+  it.each([0, 0.5, 0.8, 1])('accepts blur %p', async (blur) => {
+    await superResolve(fivePaths, { blur });
+    expect(mockNativeSuperResolve).toHaveBeenCalledWith(fivePaths, { blur });
   });
 });
 
@@ -120,7 +178,12 @@ describe('superResolve native pass-through (SR-CORE-01)', () => {
   });
 
   it('passes options through unchanged', async () => {
-    const options = { scale: 3 as const, outputPath: '/out/r.png' };
+    const options = {
+      n: 15,
+      blur: 0,
+      scale: 3 as const,
+      outputPath: '/out/r.png',
+    };
     await superResolve(fivePaths, options);
     expect(mockNativeSuperResolve).toHaveBeenCalledWith(fivePaths, options);
   });

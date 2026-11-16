@@ -249,6 +249,7 @@ T10 → T14 (example) ; T13 → T15 (README, STATE)
 
 **Tests**: unit (Jest) · **Gate**: quick (JS)
 **Commit**: `feat!: expose n, blur and merge metadata in superResolve`
+**Status**: ✅ Done — `yarn test` 89/89, `yarn typecheck`, `yarn lint` clean. Same accept/reject table as T6 plus JS-only cases (strings, `null`, non-integral `n`); literal messages for paths/n/blur. *(Changed during T9: `example/src/burst/__tests__/burstRunner.test.ts` result fixture gained `refIndex`/`used`/`dropped` so `tsc` passes; the example's own changes stay in T14.)*
 
 ---
 

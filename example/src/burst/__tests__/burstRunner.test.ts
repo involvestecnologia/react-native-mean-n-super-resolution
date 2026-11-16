@@ -9,6 +9,9 @@ const srResult: SuperResolveResult = {
   width: 2160,
   height: 2880,
   framesUsed: 4,
+  refIndex: 0,
+  used: [0, 1, 2, 3],
+  dropped: [{ index: 4, reason: 'ECC did not converge, dropped' }],
 };
 
 type Call = { kind: 'delete'; paths: string[] } | { kind: 'take'; i: number };

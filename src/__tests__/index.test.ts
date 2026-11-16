@@ -5,6 +5,8 @@ jest.mock('../NativeMeanNSuperResolution', () => ({
   default: { superResolve: jest.fn() },
 }));
 
+import type { SuperResolveDropped, SuperResolveResult } from '../index';
+
 const api = require('../index') as Record<string, unknown>;
 
 it('exports superResolve and ErrorCodes, and no multiply (SR-DOC-01)', () => {
@@ -18,4 +20,18 @@ it('exports superResolve and ErrorCodes, and no multiply (SR-DOC-01)', () => {
     INTERNAL: 'E_INTERNAL',
   });
   expect('multiply' in api).toBe(false);
+});
+
+it('exports the result types with merge metadata (LP-API-01)', () => {
+  const dropped: SuperResolveDropped = { index: 3, reason: 'x' };
+  const result: SuperResolveResult = {
+    path: 'file:///o.jpg',
+    width: 1,
+    height: 1,
+    framesUsed: 2,
+    refIndex: 0,
+    used: [0, 1],
+    dropped: [dropped],
+  };
+  expect(result.used[0]).toBe(result.refIndex);
 });
