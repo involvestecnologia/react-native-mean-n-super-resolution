@@ -10,15 +10,31 @@
 
 namespace facebook::react {
 
-using SuperResolveOptions =
-  NativeMeanNSuperResolutionSuperResolveOptions<std::optional<double>, std::optional<std::string>>;
+using SuperResolveOptions = NativeMeanNSuperResolutionSuperResolveOptions<
+  std::optional<double>,
+  std::optional<double>,
+  std::optional<double>,
+  std::optional<std::string>>;
 
 template <>
 struct Bridging<SuperResolveOptions>
   : NativeMeanNSuperResolutionSuperResolveOptionsBridging<SuperResolveOptions> {};
 
-using SuperResolveResult =
-  NativeMeanNSuperResolutionSuperResolveResult<std::string, double, double, double>;
+using SuperResolveDropped =
+  NativeMeanNSuperResolutionSuperResolveDropped<double, std::string>;
+
+template <>
+struct Bridging<SuperResolveDropped>
+  : NativeMeanNSuperResolutionSuperResolveDroppedBridging<SuperResolveDropped> {};
+
+using SuperResolveResult = NativeMeanNSuperResolutionSuperResolveResult<
+  std::string,
+  double,
+  double,
+  double,
+  double,
+  std::vector<double>,
+  std::vector<SuperResolveDropped>>;
 
 template <>
 struct Bridging<SuperResolveResult>

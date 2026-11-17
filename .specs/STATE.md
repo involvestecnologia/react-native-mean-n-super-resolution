@@ -29,7 +29,7 @@
 ### AD-004
 - **Decision**: Native code must never rely on catching `cv::Exception`: opencv-mobile is built with `-fno-exceptions`, so OpenCV assertion failures abort the process. Every OpenCV call is preceded by input guards (non-empty, expected type, positive sizes, finite matrices) and allocation-heavy steps by a memory pre-flight budget.
 - **Reason**: Owner chose to keep opencv-mobile (AD-002) rather than build/ship OpenCV with exceptions (2026-11-11).
-- **Trade-off**: No ECC (`findTransformECC` asserts internally) — alignment is translation-only; residual crash risk for unforeseen OpenCV asserts.
+- **Trade-off**: No ECC (`findTransformECC` asserts internally) — alignment is translation-only; residual crash risk for unforeseen OpenCV asserts. *(Amended 2026-11-16 by AD-006: ECC homography is allowed through the vendored `sr::vendor::eccHomography` only; `cv::findTransformECC` stays forbidden.)*
 - **Scope**: All native code calling OpenCV.
 - **Date**: 2026-11-11
 - **Status**: active
@@ -42,13 +42,21 @@
 - **Date**: 2026-11-12
 - **Status**: active
 
+### AD-006
+- **Decision**: Frame alignment uses a vendored copy of OpenCV 4.14.0's ECC homography (`cpp/sr/vendor/Ecc.cpp`, homography path only) whose non-convergence returns a failure instead of raising `CV_Error`. Amends AD-004's trade-off "No ECC": ECC is allowed through this copy only; calling `cv::findTransformECC` directly stays forbidden.
+- **Reason**: Owner chose lab parity with burst-sr-lab `mean_N` (2026-11-16), which aligns with ECC `MOTION_HOMOGRAPHY`. Spike (lab-parity-mean design.md): vendored copy is bit-identical to the library function; flat input and off-image guesses return failure without abort; Python cv2 4.12 vs C++ 4.14 differ by ~1e-6 px.
+- **Trade-off**: ~300 lines of upstream code to re-sync when `opencv.json` bumps OpenCV; AD-004 guards still apply to everything else.
+- **Scope**: `cpp/sr/Align.*`, `cpp/sr/vendor/**`.
+- **Date**: 2026-11-16
+- **Status**: active
+
 ## Handoff
 
-- **Feature**: `.specs/features/example-camera-burst`
-- **Phase / Task**: Done — validation PASS (iteration 2)
-- **Completed**: T1–T7, UAT fixes d3d30e2/859da98, verifier fixes 4c2ef45/defe18f/cdc85a6
+- **Feature**: `.specs/features/lab-parity-mean` (port burst-sr-lab `mean_N` + bicubic; breaking API)
+- **Phase / Task**: Execute — T1–T9 done, T10 partial (iOS CI open); T11–T15 done (tasks approved 2026-11-16); next: Validate phase
+- **Completed**: spec/context/design/tasks (dffe611), macOS host link fix (d3045a6), T1 3efe012, T2 dc99000, T3 17939bb, T4 5d280db, T5 4395b0f, T6 a279a3f, T7 d96fda3, T8 418f7c4, T9 2ed388f, T10 3a3e38a (partial), T11 e772c89, T12 75212fa, T13 cdd7de0, T14 e916a2d, T15 e65d62a; `yarn test:native` 86/86, `yarn test` 91/91, `yarn test:parity` 4/4 synthetic bursts (validation.md). Per-task notes and deviations in tasks.md `Status` lines. Lab reference code: `~/repos/burst-sr-lab` (LAB_DIR for T12/T13)
 - **In-progress** (file:line): none
-- **Next step**: Review/merge PR #1 (base `feat/opencv-super-resolution`; retarget to `main` after that branch merges); watch CI
-- **Blockers**: none (notes: CAM-12 code-review only; AVD virtual scene, no real handheld burst; iOS deferred)
+- **Next step**: Validate lab-parity-mean (independent verifier, `validation.md` already holds T13 parity results; check every LP-* AC with evidence, mutation checks). Open evidence gaps: iOS (`build-ios` CI, no Mac run), field sessions (`yarn test:parity --sessions <dir>`). Android UAT note: API 37 emulators need `adb shell pm grant meannsuperresolution.example android.permission.ACCESS_LOCAL_NETWORK` to reach Metro; API 35 (Pixel_9) works with `adb reverse tcp:8081 tcp:8081`
+- **Blockers**: none; `example/android/gradlew` is 100644 in git (local `yarn turbo run build:android` fails with EACCES; use `sh ./gradlew`) (field sessions of 2026-10-28 not on this machine: run `yarn test:parity --sessions <dir>` when available, open evidence gap)
 - **Uncommitted files**: none
-- **Branch**: feat/example-camera-burst
+- **Branch**: feat/lab-parity-mean

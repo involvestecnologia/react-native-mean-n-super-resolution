@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { mergeSummary } from '../burst/mergeSummary';
 import type { CameraRun } from '../burst/types';
 
 type Props = { run: CameraRun; onBack: () => void };
@@ -14,7 +15,8 @@ type Props = { run: CameraRun; onBack: () => void };
 export default function PreviewScreen({ run, onBack }: Props) {
   const [showReference, setShowReference] = useState(false);
   const { result, paths, requested, elapsedMs } = run;
-  const uri = showReference ? `file://${paths[0]}` : result.path;
+  const uri = showReference ? `file://${paths[result.refIndex]}` : result.path;
+  const reference = `Reference (index ${result.refIndex})`;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -29,15 +31,16 @@ export default function PreviewScreen({ run, onBack }: Props) {
         framesUsed: {result.framesUsed} / {requested} requested
       </Text>
       <Text testID="preview-ms">Processing: {elapsedMs} ms</Text>
+      <Text testID="preview-merge" selectable>
+        {mergeSummary(result).join('\n')}
+      </Text>
       <View style={styles.toggle}>
         <Button
           title={showReference ? 'Enhanced' : '[Enhanced]'}
           onPress={() => setShowReference(false)}
         />
         <Button
-          title={
-            showReference ? '[Reference (frame 1)]' : 'Reference (frame 1)'
-          }
+          title={showReference ? `[${reference}]` : reference}
           onPress={() => setShowReference(true)}
         />
       </View>

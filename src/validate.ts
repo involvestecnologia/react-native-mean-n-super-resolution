@@ -1,6 +1,10 @@
 import { ErrorCodes } from './errors';
 
-const FRAME_COUNTS = [5, 15, 30];
+// invariant: bounds shared with cpp/sr/Pipeline.h (kMinFrames..kMaxFrames, kMinN..kMaxN).
+const MIN_FRAMES = 3;
+const MAX_FRAMES = 30;
+const MIN_N = 2;
+const MAX_N = 30;
 const SCALES = [1, 2, 3, 4];
 const EXTENSIONS = ['.jpg', '.jpeg', '.png'];
 
@@ -17,9 +21,9 @@ function lowerExt(path: string): string {
 // invariant: mirrors cpp/sr/Validate.cpp; returns null iff the native call may start.
 export function validateArgs(paths: unknown, options: unknown): string | null {
   if (!Array.isArray(paths)) return invalid('paths must be an array');
-  if (!FRAME_COUNTS.includes(paths.length)) {
+  if (paths.length < MIN_FRAMES || paths.length > MAX_FRAMES) {
     return invalid(
-      `paths must contain exactly 5, 15 or 30 entries, got ${paths.length}`
+      `paths must contain ${MIN_FRAMES} to ${MAX_FRAMES} entries, got ${paths.length}`
     );
   }
   const bad = paths.findIndex((p) => typeof p !== 'string' || p === '');
@@ -29,7 +33,21 @@ export function validateArgs(paths: unknown, options: unknown): string | null {
   if (typeof options !== 'object' || options === null) {
     return invalid('options must be an object');
   }
-  const { scale, outputPath } = options as Record<string, unknown>;
+  const { n, blur, scale, outputPath } = options as Record<string, unknown>;
+  if (
+    n !== undefined &&
+    !(Number.isInteger(n) && (n as number) >= MIN_N && (n as number) <= MAX_N)
+  ) {
+    return invalid(
+      `n must be an integer from ${MIN_N} to ${MAX_N}, got ${String(n)}`
+    );
+  }
+  if (
+    blur !== undefined &&
+    !(typeof blur === 'number' && blur >= 0 && blur <= 1)
+  ) {
+    return invalid(`blur must be a number from 0 to 1, got ${String(blur)}`);
+  }
   if (scale !== undefined && !SCALES.includes(scale as number)) {
     return invalid(`scale must be 1, 2, 3 or 4, got ${String(scale)}`);
   }

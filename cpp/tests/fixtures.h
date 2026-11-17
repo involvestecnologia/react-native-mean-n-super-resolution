@@ -17,6 +17,9 @@ std::filesystem::path freshDir();
 
 std::string writePng(const std::filesystem::path& dir, const std::string& name, const cv::Mat& img);
 
+// invariant: writes frames[i] as "f<i>.png" into dir, returns the paths in order.
+std::vector<std::string> writeFrames(const std::filesystem::path& dir, const std::vector<cv::Mat>& frames);
+
 std::vector<unsigned char> readBytes(const std::filesystem::path& file);
 
 }  // namespace fixtures

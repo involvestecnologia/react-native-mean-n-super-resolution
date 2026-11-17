@@ -3,8 +3,15 @@ import { TurboModuleRegistry, type TurboModule } from 'react-native';
 // invariant: codegen reads these aliases from this file only; they generate the
 // C++ structs used by cpp/MeanNSuperResolutionImpl. Public types live in types.ts.
 export type SuperResolveOptions = {
+  n?: number;
+  blur?: number;
   scale?: number;
   outputPath?: string;
+};
+
+export type SuperResolveDropped = {
+  index: number;
+  reason: string;
 };
 
 export type SuperResolveResult = {
@@ -12,6 +19,9 @@ export type SuperResolveResult = {
   width: number;
   height: number;
   framesUsed: number;
+  refIndex: number;
+  used: number[];
+  dropped: SuperResolveDropped[];
 };
 
 export interface Spec extends TurboModule {

@@ -42,6 +42,14 @@ std::string writePng(const std::filesystem::path& dir, const std::string& name, 
   return p;
 }
 
+std::vector<std::string> writeFrames(const std::filesystem::path& dir, const std::vector<cv::Mat>& frames) {
+  std::vector<std::string> paths;
+  for (size_t i = 0; i < frames.size(); ++i) {
+    paths.push_back(writePng(dir, "f" + std::to_string(i) + ".png", frames[i]));
+  }
+  return paths;
+}
+
 std::vector<unsigned char> readBytes(const std::filesystem::path& file) {
   std::ifstream in(file, std::ios::binary);
   return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
